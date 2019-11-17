@@ -11,7 +11,7 @@ import MediaPlayer
 public typealias AudioPlayerState = AVPlayerWrapperState
 
 public class AudioPlayer: AVPlayerWrapperDelegate {
-    
+  
     private var _wrapper: AVPlayerWrapperProtocol
     
     /// The wrapper around the underlying AVPlayer
@@ -163,13 +163,21 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
                      playWhenReady: playWhenReady,
                      initialTime: (item as? InitialTiming)?.getInitialTime(),
                      options:(item as? AssetOptionsProviding)?.getAssetOptions())
-        
+     
         self._currentItem = item
         
         if (automaticallyUpdateNowPlayingInfo) {
             self.loadNowPlayingMetaValues()
         }
-        enableRemoteCommands(forItem: item)
+            enableRemoteCommands(forItem: item)
+    }
+    
+    public func preload(item: AudioItem) {
+        self.wrapper.preload(item: item);
+    }
+    
+    public func cancelPreload(item: AudioItem) {
+        self.wrapper.cancelPreload(item: item);
     }
     
     /**
@@ -197,7 +205,7 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
      Stop playback, resetting the player.
      */
     public func stop() {
-        self.reset()
+       self.reset()
         self.wrapper.stop()
         self.event.playbackEnd.emit(data: .playerStopped)
     }
@@ -346,5 +354,5 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
     func AVWrapperDidRecreateAVPlayer() {
         self.event.didRecreateAVPlayer.emit(data: ())
     }
-    
+
 }
