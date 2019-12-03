@@ -100,6 +100,7 @@ public class QueuedAudioPlayer: AudioPlayer {
      - throws: `APError`
      */
     public func add(items: [AudioItem], playWhenReady: Bool = true) throws {
+        
         if currentItem == nil {
             queueManager.addItems(items)
             try self.load(item: currentItem!, playWhenReady: playWhenReady)

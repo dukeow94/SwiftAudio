@@ -11,6 +11,7 @@ import MediaPlayer
 public typealias AudioPlayerState = AVPlayerWrapperState
 
 public class AudioPlayer: AVPlayerWrapperDelegate {
+    
     private var _wrapper: AVPlayerWrapperProtocol
     
     /// The wrapper around the underlying AVPlayer
@@ -172,14 +173,6 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
         if (item is RemoteCommandable) {
             enableRemoteCommands(forItem: item)
         }
-    }
-    
-    public func preload(urlString: String) {
-        self.wrapper.preload(urlString: urlString);
-    }
-    
-    public func cancelPreload(urlString: String) {
-        self.wrapper.cancelPreload(urlString: urlString);
     }
     
     /**
@@ -358,41 +351,5 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
     func AVWrapperDidRecreateAVPlayer() {
         self.event.didRecreateAVPlayer.emit(data: ())
     }
-//
-//    func preload(item: AudioItem) throws {
-//        let urlString = item.getSourceUrl();
-//
-//        let url: URL
-//              switch item.getSourceType() {
-//              case .stream:
-//                  if let itemUrl = URL(string: urlString) {
-//                      url = itemUrl
-//                  }
-//                  else {
-//                      throw APError.LoadError.invalidSourceUrl(urlString)
-//                  }
-//              case .file:
-//                  url = URL(fileURLWithPath: urlString)
-//              }
-//
-//        let asset = AVURLAsset(url:url);
-//        let keys = ["playable","tracks","duration"];
-//
-//        asset.loadValuesAsynchronously(forKeys: keys, completionHandler: {
-//            var _: NSError? = nil
-//
-//            for key in keys {
-//                let status = asset.statusOfValue(forKey: key, error: nil)
-//                          if status == AVKeyValueStatus.failed {
-//                              return
-//                          }
-//                      }
-//
-//            DispatchQueue.main.async {
-//                self.preloadedAssets[urlString] = asset;
-//            }
-//
-//        });
-//    }
     
 }

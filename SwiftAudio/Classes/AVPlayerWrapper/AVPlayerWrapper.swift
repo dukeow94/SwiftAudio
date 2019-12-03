@@ -19,13 +19,55 @@ public enum PlaybackEndedReason: String {
 }
 
 class AVPlayerWrapper: AVPlayerWrapperProtocol {
+    func cancelPreload(urlString: String) {
+        //        print("cancelling preload", urlString);
+        guard let asset = self.preloadedAssets[urlString] as? AVAsset else {
+            return
+        }
+        print("cancelling preload ", asset);
+        asset.cancelLoading();
+        self.preloadedAssets[urlString] = nil;
+        
+    }
+    
+    func preload(urlString: String) {
+        let url =  URL(string: urlString);
+        
+        //        print("preloading ", urlString);
+
+        if let urlUn = url as URL? {
+        if(self.preloadedAssets[urlString] == nil){
+            
+                let asset = AVURLAsset(url:urlUn);
+                let keys = ["playable"];
+                
+                asset.loadValuesAsynchronously(forKeys: keys, completionHandler: {
+                    var _: NSError? = nil
+                    
+                    for key in keys {
+                        let status = asset.statusOfValue(forKey: key, error: nil)
+                        if status == AVKeyValueStatus.failed {
+                            return
+                        }
+//                        print("status man",status.rawValue)
+                    }
+                    
+                    self.preloadedAssets[urlString] = asset;
+                    
+                });
+
+            }
+                    }
+        
+    }
+    
     
     struct Constants {
         static let assetPlayableKey = "playable"
     }
     
     // MARK: - Properties
-    
+    public var preloadedAssets = [String: AVAsset?]();
     var avPlayer: AVPlayer
     let playerObserver: AVPlayerObserver
     let playerTimeObserver: AVPlayerTimeObserver
@@ -168,26 +210,33 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         }
     }
     
-    
-    
-    func load(from url: URL, playWhenReady: Bool, options: [String: Any]? = nil) {
+    func load(from url: URL, playWhenReady: Bool, headers: [String: Any]? = nil) {
         reset(soft: true)
         _playWhenReady = playWhenReady
-
+        
         if currentItem?.status == .failed {
             recreateAVPlayer()
         }
         
-        self._pendingAsset = AVURLAsset(url: url, options: options)
+        var options: [String: Any] = [:]
+        if let headers = headers {
+            options = ["AVURLAssetHTTPHeaderFieldsKey": headers]
+        }
+        
+        if(self.preloadedAssets[url.absoluteString] != nil){
+            self._pendingAsset = self.preloadedAssets[url.absoluteString] ?? AVURLAsset(url: url, options: options)
+            
+            //            print("status of audio asset ", status?.rawValue);
+            self.loadAssetIntoPlayer();
+            return
+            
+        } else {
+            // Set item
+            self._pendingAsset = AVURLAsset(url: url, options: options)
+        }
         
         if let pendingAsset = _pendingAsset {
-            self._state = .loading
-            pendingAsset.loadValuesAsynchronously(forKeys: [Constants.assetPlayableKey], completionHandler: { [weak self] in
-                
-                guard let self = self else {
-                    return
-                }
-                
+            pendingAsset.loadValuesAsynchronously(forKeys: [Constants.assetPlayableKey], completionHandler: {
                 var error: NSError? = nil
                 let status = pendingAsset.statusOfValue(forKey: Constants.assetPlayableKey, error: &error)
                 
@@ -195,20 +244,11 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
                     let isPendingAsset = (self._pendingAsset != nil && pendingAsset.isEqual(self._pendingAsset))
                     switch status {
                     case .loaded:
-                        if isPendingAsset {
-                            let currentItem = AVPlayerItem(asset: pendingAsset, automaticallyLoadedAssetKeys: [Constants.assetPlayableKey])
-                            currentItem.preferredForwardBufferDuration = self.bufferDuration
-                            self.avPlayer.replaceCurrentItem(with: currentItem)
-                            
-                            // Register for events
-                            self.playerTimeObserver.registerForBoundaryTimeEvents()
-                            self.playerObserver.startObserving()
-                            self.playerItemNotificationObserver.startObserving(item: currentItem)
-                            self.playerItemObserver.startObserving(item: currentItem)
-                        }
+                        self.loadAssetIntoPlayer();
                         break
                         
                     case .failed:
+                        //                        print("load asset failed")
                         if isPendingAsset {
                             self.delegate?.AVWrapper(failedWithError: error)
                             self._pendingAsset = nil
@@ -216,9 +256,11 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
                         break
                         
                     case .cancelled:
+                        //                        print("load asset cancelled")
                         break
                         
                     default:
+                        //                        print("default me gaya bc");
                         break
                     }
                 }
@@ -226,10 +268,30 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         }
     }
     
-    func load(from url: URL, playWhenReady: Bool, initialTime: TimeInterval? = nil, options: [String : Any]? = nil) {
+    func loadAssetIntoPlayer() {
+        if let pendingAsset = _pendingAsset {
+            
+            let isPendingAsset = (self._pendingAsset != nil && pendingAsset.isEqual(self._pendingAsset))
+            
+            if isPendingAsset {
+                //                print("Loaded  ", pendingAsset);
+                let currentItem = AVPlayerItem(asset: pendingAsset, automaticallyLoadedAssetKeys: [Constants.assetPlayableKey])
+                currentItem.preferredForwardBufferDuration = self.bufferDuration
+                self.avPlayer.replaceCurrentItem(with: currentItem)
+                
+                // Register for events
+                self.playerTimeObserver.registerForBoundaryTimeEvents()
+                self.playerObserver.startObserving()
+                self.playerItemNotificationObserver.startObserving(item: currentItem)
+                self.playerItemObserver.startObserving(item: currentItem)
+            }
+        }
+    }
+    
+    func load(from url: URL, playWhenReady: Bool, initialTime: TimeInterval?, headers: [String: Any]?) {
         _initialTime = initialTime
         self.pause()
-        self.load(from: url, playWhenReady: playWhenReady, options: options)
+        self.load(from: url, playWhenReady: playWhenReady, headers: headers)
     }
     
     // MARK: - Util
@@ -239,8 +301,10 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         playerTimeObserver.unregisterForBoundaryTimeEvents()
         playerItemNotificationObserver.stopObservingCurrentItem()
         
-        self._pendingAsset?.cancelLoading()
-        self._pendingAsset = nil
+        if self._pendingAsset != nil {
+            self._pendingAsset?.cancelLoading()
+            self._pendingAsset = nil
+        }
         
         if !soft {
             avPlayer.replaceCurrentItem(with: nil)
@@ -273,7 +337,7 @@ extension AVPlayerWrapper: AVPlayerObserverDelegate {
                 self._state = .paused
             }
         case .waitingToPlayAtSpecifiedRate:
-            self._state = .buffering
+            self._state = .loading
         case .playing:
             self._state = .playing
         @unknown default:
@@ -283,16 +347,17 @@ extension AVPlayerWrapper: AVPlayerObserverDelegate {
     
     func player(statusDidChange status: AVPlayer.Status) {
         switch status {
+            
         case .readyToPlay:
-            if _playWhenReady && (_initialTime ?? 0) == 0 {
+            self._state = .ready
+            
+            if let initialTime = _initialTime {
+                self.seek(to: initialTime)
+            }
+            else if _playWhenReady {
                 self.play()
             }
-            else {
-                self._state = .ready
-                if let initialTime = _initialTime {
-                    self.seek(to: initialTime)
-                }
-            }
+            
             break
             
         case .failed:
